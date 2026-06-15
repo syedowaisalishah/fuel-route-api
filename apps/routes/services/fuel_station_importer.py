@@ -52,13 +52,13 @@ class FuelStationImporter:
             return ""
 
         return {
-            "name": pick("name", "station_name", "brand"),
-            "address": pick("address", "street", "street_address"),
-            "city": pick("city", "town"),
-            "state": pick("state", "region"),
+            "name": pick("name", "station_name", "brand", "Truckstop Name"),
+            "address": pick("address", "street", "street_address", "Address"),
+            "city": pick("city", "town", "City"),
+            "state": pick("state", "region", "State"),
             "latitude": pick("latitude", "lat"),
             "longitude": pick("longitude", "lng", "lon", "long"),
-            "price_per_gallon": pick("price_per_gallon", "price", "gas_price"),
+            "price_per_gallon": pick("price_per_gallon", "price", "gas_price", "Retail Price"),
         }
 
     def _to_decimal(self, value):

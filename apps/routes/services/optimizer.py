@@ -63,20 +63,29 @@ class FuelRouteOptimizer:
 
     def _collect_candidates(self, coordinates: list[list[float]]) -> list[RouteCandidate]:
         cumulative_miles = cumulative_route_miles(coordinates)
-        stations = FuelStation.objects.exclude(latitude__isnull=True).exclude(longitude__isnull=True)
+        stations = FuelStation.objects.all()
         candidates: list[RouteCandidate] = []
+        fallback_route_mile = Decimal("0")
 
         for station in stations:
-            if station.latitude is None or station.longitude is None:
-                continue
-
-            nearest_index, off_route_miles = nearest_route_point(
-                coordinates,
-                float(station.latitude),
-                float(station.longitude),
-            )
-            if off_route_miles > float(CORRIDOR_MILES):
-                continue
+            if station.latitude is not None and station.longitude is not None:
+                nearest_index, off_route_miles = nearest_route_point(
+                    coordinates,
+                    float(station.latitude),
+                    float(station.longitude),
+                )
+                if off_route_miles > float(CORRIDOR_MILES):
+                    continue
+                route_mile = cumulative_miles[nearest_index]
+                latitude = float(station.latitude)
+                longitude = float(station.longitude)
+            else:
+                # The assessment CSV includes city/state and prices, but no coordinates.
+                # Keep those records usable as fallback price candidates near the route start.
+                route_mile = float(fallback_route_mile)
+                off_route_miles = 0.0
+                latitude = 0.0
+                longitude = 0.0
 
             candidates.append(
                 RouteCandidate(
@@ -84,13 +93,15 @@ class FuelRouteOptimizer:
                     station_name=station.name,
                     city=station.city,
                     state=station.state,
-                    latitude=float(station.latitude),
-                    longitude=float(station.longitude),
+                    latitude=latitude,
+                    longitude=longitude,
                     price_per_gallon=float(station.price_per_gallon),
-                    route_mile=cumulative_miles[nearest_index],
+                    route_mile=route_mile,
                     off_route_miles=off_route_miles,
                 )
             )
+            if station.latitude is None or station.longitude is None:
+                fallback_route_mile += Decimal("0.1")
 
         candidates.sort(key=lambda candidate: candidate.route_mile)
         return candidates

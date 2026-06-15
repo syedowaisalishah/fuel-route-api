@@ -33,7 +33,7 @@ The container will:
 
 - install dependencies
 - run database migrations
-- import `data/sample_fuel_prices.csv`
+- import `data/fuel-prices-for-be-assessment.csv`
 - start Django at `http://127.0.0.1:8000`
 
 Useful URLs:
@@ -51,7 +51,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
 python manage.py migrate
-python manage.py import_fuel_prices data/sample_fuel_prices.csv
+python manage.py import_fuel_prices data/fuel-prices-for-be-assessment.csv
 python manage.py runserver
 ```
 
@@ -144,13 +144,13 @@ This keeps API behavior explicit and easier to debug than returning only `200` o
 Load fuel prices:
 
 ```bash
-python manage.py import_fuel_prices data/sample_fuel_prices.csv
+python manage.py import_fuel_prices data/fuel-prices-for-be-assessment.csv
 ```
 
 Dry run without writing:
 
 ```bash
-python manage.py import_fuel_prices data/sample_fuel_prices.csv --dry-run
+python manage.py import_fuel_prices data/fuel-prices-for-be-assessment.csv --dry-run
 ```
 
 The importer accepts common CSV headers such as:
@@ -308,4 +308,3 @@ This project is intentionally built like a small production backend:
 - tests around important behavior
 
 The core engineering choice is to treat route planning as a constrained optimization problem over route geometry and local fuel prices, not just a simple endpoint that returns static data.
-
