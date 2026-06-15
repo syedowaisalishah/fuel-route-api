@@ -4,6 +4,7 @@ from rest_framework import serializers
 class FuelPlanRequestSerializer(serializers.Serializer):
     start = serializers.CharField(max_length=255)
     finish = serializers.CharField(max_length=255)
+    include_geometry = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs):
         if attrs["start"].strip().lower() == attrs["finish"].strip().lower():

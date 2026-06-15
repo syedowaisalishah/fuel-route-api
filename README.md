@@ -118,12 +118,12 @@ Request body:
 Response includes:
 
 - resolved start and finish coordinates
-- route distance in miles
-- total gallons required at 10 MPG
-- estimated total cost
-- GeoJSON route geometry
+- route summary with distance, duration, fuel usage, and estimated total cost
+- a small route preview so the response stays readable
 - selected fuel stops
 - documented assumptions
+
+If you want the full GeoJSON route in the response, send `include_geometry: true`.
 
 ## External Services
 
@@ -204,3 +204,19 @@ For a short walkthrough, show:
 2. the route geometry and selected stops in the response
 3. the importer command
 4. the tests passing
+
+## Postman
+
+Import these files into Postman:
+
+- [Postman collection](/home/nabeel-et/fuel-route-api/postman/Fuel%20Route%20API.postman_collection.json)
+- [Local environment](/home/nabeel-et/fuel-route-api/postman/Fuel%20Route%20API.local.postman_environment.json)
+
+Set the `Fuel Route API Local` environment and send the `Fuel Plan` request with:
+
+```json
+{
+  "start": "Austin, TX",
+  "finish": "Dallas, TX"
+}
+```

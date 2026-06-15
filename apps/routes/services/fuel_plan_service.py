@@ -9,7 +9,7 @@ from apps.routes.services.routing_service import RoutingService
 
 
 class FuelPlanService:
-    def build_plan(self, start: str, finish: str) -> dict:
+    def build_plan(self, start: str, finish: str, include_geometry: bool = False) -> dict:
         start_location = GeocodingService().resolve_us_location(start)
         finish_location = GeocodingService().resolve_us_location(finish)
         route = RoutingService().get_route(
@@ -30,7 +30,7 @@ class FuelPlanService:
             total_cost = self._estimate_cost(distance_miles)
             pricing_source = "fallback_average_or_default_price"
 
-        return {
+        payload = {
             "start": start,
             "finish": finish,
             "start_location": {
@@ -43,10 +43,13 @@ class FuelPlanService:
                 "latitude": finish_location.latitude,
                 "longitude": finish_location.longitude,
             },
-            "distance_miles": distance_miles,
-            "fuel_required_gallons": fuel_required_gallons,
-            "estimated_total_cost": total_cost,
-            "route_geometry": route.geometry,
+            "route_summary": {
+                "distance_miles": distance_miles,
+                "estimated_duration_minutes": Decimal(str(route.duration_seconds / 60)).quantize(Decimal("0.1")),
+                "fuel_required_gallons": fuel_required_gallons,
+                "estimated_total_cost": total_cost,
+            },
+            "route_geometry_preview": self._preview_geometry(route.geometry),
             "fuel_stops": [
                 {
                     "station_id": stop.station_id,
@@ -74,8 +77,24 @@ class FuelPlanService:
             ],
         }
 
+        if include_geometry:
+            payload["route_geometry"] = route.geometry
+
+        return payload
+
     def _estimate_cost(self, distance_miles: Decimal) -> Decimal:
         gallons = distance_miles / MPG
         average_price = FuelStation.objects.aggregate(avg_price=Avg("price_per_gallon"))["avg_price"]
         price = Decimal(str(average_price)) if average_price is not None else Decimal("3.50")
         return (gallons * price).quantize(Decimal("0.01"))
+
+    def _preview_geometry(self, geometry: dict) -> dict:
+        coordinates = geometry.get("coordinates") or []
+        preview = {
+            "type": geometry.get("type", "LineString"),
+            "coordinate_count": len(coordinates),
+        }
+        if coordinates:
+            preview["start"] = coordinates[0]
+            preview["end"] = coordinates[-1]
+        return preview

@@ -26,6 +26,7 @@ class FuelPlanView(APIView):
             payload = FuelPlanService().build_plan(
                 start=serializer.validated_data["start"],
                 finish=serializer.validated_data["finish"],
+                include_geometry=serializer.validated_data["include_geometry"],
             )
         except LocationLookupError as exc:
             return Response({"detail": str(exc)}, status=400)

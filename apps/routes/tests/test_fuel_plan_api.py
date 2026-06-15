@@ -35,9 +35,10 @@ class FuelPlanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["start"], "Austin, TX")
         self.assertEqual(response.data["finish"], "Dallas, TX")
-        self.assertEqual(response.data["distance_miles"], Decimal("200.0"))
-        self.assertEqual(response.data["fuel_required_gallons"], Decimal("20.00"))
-        self.assertEqual(response.data["route_geometry"]["type"], "LineString")
+        self.assertEqual(response.data["route_summary"]["distance_miles"], Decimal("200.0"))
+        self.assertEqual(response.data["route_summary"]["fuel_required_gallons"], Decimal("20.00"))
+        self.assertNotIn("route_geometry", response.data)
+        self.assertEqual(response.data["route_geometry_preview"]["type"], "LineString")
         self.assertIn("assumptions", response.data)
 
     def test_rejects_same_start_and_finish(self):
@@ -48,3 +49,29 @@ class FuelPlanApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    @patch("apps.routes.services.fuel_plan_service.GeocodingService.resolve_us_location")
+    @patch("apps.routes.services.fuel_plan_service.RoutingService.get_route")
+    def test_can_include_full_geometry_when_requested(self, mock_route, mock_geocode):
+        mock_geocode.side_effect = [
+            type("Geo", (), {"display_name": "Austin, TX, USA", "latitude": 30.2672, "longitude": -97.7431})(),
+            type("Geo", (), {"display_name": "Dallas, TX, USA", "latitude": 32.7767, "longitude": -96.7970})(),
+        ]
+        mock_route.return_value = type(
+            "Route",
+            (),
+            {
+                "distance_meters": 321869.0,
+                "duration_seconds": 14400.0,
+                "geometry": {"type": "LineString", "coordinates": [[-97.7431, 30.2672], [-96.7970, 32.7767]]},
+            },
+        )()
+
+        response = self.client.post(
+            "/api/routes/fuel-plan/",
+            data={"start": "Austin, TX", "finish": "Dallas, TX", "include_geometry": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("route_geometry", response.data)
