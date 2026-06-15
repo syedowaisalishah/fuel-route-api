@@ -180,6 +180,18 @@ This project is intentionally structured as a small algorithmic backend service 
 Build and run:
 
 ```bash
+docker compose up --build
+```
+
+The container will:
+
+- run migrations
+- load `data/sample_fuel_prices.csv`
+- start Django on `http://127.0.0.1:8000`
+
+If you want a plain image build instead:
+
+```bash
 docker build -t fuel-route-api .
 docker run --env-file .env -p 8000:8000 fuel-route-api
 ```
