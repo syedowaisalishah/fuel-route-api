@@ -51,6 +51,39 @@ class FuelPlanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     @patch("apps.routes.services.fuel_plan_service.GeocodingService.resolve_us_location")
+    def test_returns_404_when_location_is_missing(self, mock_geocode):
+        from apps.routes.services.geocoding_service import LocationNotFoundError
+
+        mock_geocode.side_effect = LocationNotFoundError("Location not found in the USA: Atlantis")
+
+        response = self.client.post(
+            "/api/routes/fuel-plan/",
+            data={"start": "Atlantis", "finish": "Dallas, TX"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    @patch("apps.routes.services.fuel_plan_service.GeocodingService.resolve_us_location")
+    @patch("apps.routes.services.fuel_plan_service.RoutingService.get_route")
+    def test_returns_504_on_routing_timeout(self, mock_route, mock_geocode):
+        from apps.routes.services.routing_service import RoutingTimeoutError
+
+        mock_geocode.side_effect = [
+            type("Geo", (), {"display_name": "Austin, TX, USA", "latitude": 30.2672, "longitude": -97.7431})(),
+            type("Geo", (), {"display_name": "Dallas, TX, USA", "latitude": 32.7767, "longitude": -96.7970})(),
+        ]
+        mock_route.side_effect = RoutingTimeoutError("Routing request timed out")
+
+        response = self.client.post(
+            "/api/routes/fuel-plan/",
+            data={"start": "Austin, TX", "finish": "Dallas, TX"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 504)
+
+    @patch("apps.routes.services.fuel_plan_service.GeocodingService.resolve_us_location")
     @patch("apps.routes.services.fuel_plan_service.RoutingService.get_route")
     def test_can_include_full_geometry_when_requested(self, mock_route, mock_geocode):
         mock_geocode.side_effect = [

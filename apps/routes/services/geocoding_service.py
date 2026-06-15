@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from hashlib import sha256
+from socket import timeout as SocketTimeout
 from json import loads
+from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
@@ -9,6 +11,18 @@ from django.core.cache import cache
 
 
 class LocationLookupError(Exception):
+    pass
+
+
+class LocationNotFoundError(LocationLookupError):
+    pass
+
+
+class GeocodingServiceUnavailableError(LocationLookupError):
+    pass
+
+
+class GeocodingTimeoutError(LocationLookupError):
     pass
 
 
@@ -44,11 +58,15 @@ class GeocodingService:
         try:
             with urlopen(request, timeout=settings.EXTERNAL_API_TIMEOUT_SECONDS) as response:
                 payload = loads(response.read().decode("utf-8"))
+        except SocketTimeout as exc:  # pragma: no cover - network failure path
+            raise GeocodingTimeoutError(f"Geocoding timed out for location: {query}") from exc
+        except URLError as exc:  # pragma: no cover - network failure path
+            raise GeocodingServiceUnavailableError(f"Geocoding service unavailable for location: {query}") from exc
         except Exception as exc:  # pragma: no cover - network failure path
-            raise LocationLookupError(f"Unable to geocode location: {query}") from exc
+            raise GeocodingServiceUnavailableError(f"Unable to geocode location: {query}") from exc
 
         if not payload:
-            raise LocationLookupError(f"Location not found in the USA: {query}")
+            raise LocationNotFoundError(f"Location not found in the USA: {query}")
 
         item = payload[0]
         location = GeocodedLocation(

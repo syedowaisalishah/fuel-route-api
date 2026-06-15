@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from hashlib import sha256
+from socket import timeout as SocketTimeout
 from json import loads
+from urllib.error import URLError
 from urllib.request import urlopen
 
 from django.conf import settings
@@ -8,6 +10,18 @@ from django.core.cache import cache
 
 
 class RouteLookupError(Exception):
+    pass
+
+
+class RouteNotFoundError(RouteLookupError):
+    pass
+
+
+class RoutingServiceUnavailableError(RouteLookupError):
+    pass
+
+
+class RoutingTimeoutError(RouteLookupError):
     pass
 
 
@@ -34,11 +48,15 @@ class RoutingService:
         try:
             with urlopen(url, timeout=settings.EXTERNAL_API_TIMEOUT_SECONDS) as response:
                 payload = loads(response.read().decode("utf-8"))
+        except SocketTimeout as exc:  # pragma: no cover - network failure path
+            raise RoutingTimeoutError("Routing request timed out") from exc
+        except URLError as exc:  # pragma: no cover - network failure path
+            raise RoutingServiceUnavailableError("Routing service unavailable") from exc
         except Exception as exc:  # pragma: no cover - network failure path
-            raise RouteLookupError("Unable to fetch route from routing service") from exc
+            raise RoutingServiceUnavailableError("Unable to fetch route from routing service") from exc
 
         if payload.get("code") != "Ok" or not payload.get("routes"):
-            raise RouteLookupError("No route found between the provided locations")
+            raise RouteNotFoundError("No route found between the provided locations")
 
         route = payload["routes"][0]
         result = RouteResult(
