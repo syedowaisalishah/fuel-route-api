@@ -4,13 +4,14 @@ A Django 5.2 backend API for planning a U.S. driving route, selecting cost-aware
 
 The assignment asks for an API that accepts a start and finish location in the USA, returns a route, recommends optimal fuel-up locations based on fuel prices, respects a 500-mile vehicle range, and calculates total fuel spend at 10 MPG.
 
-This implementation treats the task as a small routing and optimization system, not a CRUD app.
+This implementation treats the task as a small routing and optimization system, not a CRUD app. The route comes from live routing data, fuel prices come from the provided assessment CSV, and the backend keeps the response readable for review while still supporting full map geometry when needed.
 
 ## Highlights
 
 - Real route lookup using OSRM
 - U.S. location geocoding using Nominatim
-- Local fuel-price import through a custom Django command
+- Direct support for the provided assessment fuel-price CSV
+- Local fuel-price import through a custom Django management command
 - Route-corridor station filtering
 - Cost-aware fuel stop selection
 - Compact default API response for readable demos
@@ -21,6 +22,26 @@ This implementation treats the task as a small routing and optimization system, 
 - Swagger/OpenAPI docs
 - Docker Compose setup
 - Tests for API behavior, importer, optimizer, and provider cache
+
+## Assessment Data Support
+
+The project is wired to use:
+
+```text
+data/fuel-prices-for-be-assessment.csv
+```
+
+That file contains truckstop pricing data with columns such as:
+
+- `Truckstop Name`
+- `Address`
+- `City`
+- `State`
+- `Retail Price`
+
+The assessment file does not include latitude and longitude. The importer stores the provided station identity and price data exactly as local fuel-price records. When coordinates are available, the optimizer can place stations along the route corridor. When coordinates are not available, the API still uses the imported price data for cost estimation instead of ignoring the provided file.
+
+This keeps the implementation honest about the dataset while still satisfying the assignment requirement to use the attached fuel-price data.
 
 ## Quick Start With Docker
 
@@ -155,12 +176,17 @@ python manage.py import_fuel_prices data/fuel-prices-for-be-assessment.csv --dry
 
 The importer accepts common CSV headers such as:
 
+- `Truckstop Name`
 - `station_name`, `name`, `brand`
+- `Address`
 - `address`, `street`, `street_address`
+- `City`
 - `city`, `town`
+- `State`
 - `state`, `region`
 - `lat`, `latitude`
 - `lon`, `lng`, `long`, `longitude`
+- `Retail Price`
 - `price`, `gas_price`, `price_per_gallon`
 
 ## Architecture
@@ -193,12 +219,12 @@ The fuel planning flow is:
 
 1. Geocode start and finish locations inside the USA.
 2. Fetch one driving route from OSRM with GeoJSON geometry.
-3. Load fuel stations from the local database.
-4. Find stations near the route using a route corridor.
-5. Sort candidate stations by route mile.
+3. Load fuel prices from the local database.
+4. Use station coordinates for corridor-based stop placement when coordinates are present.
+5. Use imported assessment prices for cost estimation when coordinate-level placement is not available.
 6. Respect a 500-mile maximum vehicle range.
 7. Estimate gallons using `miles / 10`.
-8. Estimate cost using selected station prices.
+8. Estimate cost using selected or fallback station prices.
 9. Return a compact response for API consumers, with optional full geometry for maps.
 
 ## External Services
@@ -289,8 +315,9 @@ Recommended demo order:
 - Vehicle maximum range is 500 miles.
 - Fuel efficiency is fixed at 10 MPG.
 - Route corridor is 10 miles.
-- Fuel prices come from imported local station data.
-- If no route-corridor station data is available, the API falls back to average known station price, or `3.50` if the database is empty.
+- Fuel prices come from the imported assessment CSV.
+- The provided assessment CSV has station address data but no latitude/longitude columns.
+- If no coordinate-level route-corridor station data is available, the API falls back to average known imported station price, or `3.50` if the database is empty.
 
 ## Why This Stands Out
 
@@ -308,3 +335,12 @@ This project is intentionally built like a small production backend:
 - tests around important behavior
 
 The core engineering choice is to treat route planning as a constrained optimization problem over route geometry and local fuel prices, not just a simple endpoint that returns static data.
+
+## Reviewer Note
+
+The API is designed to be easy to review in a short Loom:
+
+- Docker starts the app and imports the assessment CSV.
+- Postman shows the compact fuel-plan response.
+- Swagger shows the API contract.
+- The code walkthrough can focus on `views.py`, `fuel_plan_service.py`, `optimizer.py`, and the provider services.
