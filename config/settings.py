@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "apps.routes",
 ]
 
@@ -88,6 +89,16 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+REST_FRAMEWORK = {
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Fuel Route API",
+    "DESCRIPTION": "Route planning API that returns optimized fuel stops and trip cost estimates.",
+    "VERSION": "1.0.0",
+}
 
 CACHES = {
     "default": {

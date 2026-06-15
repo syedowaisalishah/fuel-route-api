@@ -11,6 +11,7 @@ Backend API for planning a U.S. driving route and estimating cost-aware fuel sto
 - Nominatim for geocoding
 - OSRM for routing
 - Django local memory cache for repeat geocode/route requests
+- Swagger/OpenAPI docs via `drf-spectacular`
 
 ## Project Layout
 
@@ -88,6 +89,12 @@ API root:
 
 ```bash
 curl http://127.0.0.1:8000/api/
+```
+
+Swagger UI:
+
+```bash
+http://127.0.0.1:8000/api/docs/
 ```
 
 ## What This API Does
@@ -220,3 +227,7 @@ Set the `Fuel Route API Local` environment and send the `Fuel Plan` request with
   "finish": "Dallas, TX"
 }
 ```
+
+## Swagger
+
+Use the Swagger UI at `http://127.0.0.1:8000/api/docs/` to show the API contract in your Loom.
