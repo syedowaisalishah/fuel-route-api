@@ -1,111 +1,69 @@
 # Fuel Route API
 
-Backend API for planning a U.S. driving route and estimating cost-aware fuel stops using Django, Django REST Framework, OSRM routing, Nominatim geocoding, and local fuel-price data.
+A Django 5.2 backend API for planning a U.S. driving route, selecting cost-aware fuel stops, and estimating trip fuel cost.
 
-## Tech Stack
+The assignment asks for an API that accepts a start and finish location in the USA, returns a route, recommends optimal fuel-up locations based on fuel prices, respects a 500-mile vehicle range, and calculates total fuel spend at 10 MPG.
 
-- Python 3.12
-- Django 5.2
-- Django REST Framework
-- SQLite for local development
-- Nominatim for geocoding
-- OSRM for routing
-- Django local memory cache for repeat geocode/route requests
-- Swagger/OpenAPI docs via `drf-spectacular`
+This implementation treats the task as a small routing and optimization system, not a CRUD app.
 
-## Project Layout
+## Highlights
 
-- `config/` for project settings, URLs, ASGI, and WSGI
-- `apps/routes/` for the route-planning domain app
-- `apps/routes/services/` for routing, geocoding, importing, geometry, and optimization logic
-- `data/` for sample fuel-price CSV data
+- Real route lookup using OSRM
+- U.S. location geocoding using Nominatim
+- Local fuel-price import through a custom Django command
+- Route-corridor station filtering
+- Cost-aware fuel stop selection
+- Compact default API response for readable demos
+- Optional full GeoJSON route geometry with `include_geometry`
+- Pydantic response schemas for typed service-layer contracts
+- Proper HTTP status codes for validation, not-found, provider failure, and timeout cases
+- Cached geocoding and routing calls to avoid repeated external API requests
+- Swagger/OpenAPI docs
+- Docker Compose setup
+- Tests for API behavior, importer, optimizer, and provider cache
 
-## Setup
+## Quick Start With Docker
 
-Create and activate a virtual environment:
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The container will:
+
+- install dependencies
+- run database migrations
+- import `data/sample_fuel_prices.csv`
+- start Django at `http://127.0.0.1:8000`
+
+Useful URLs:
+
+- Health: `http://127.0.0.1:8000/health/`
+- API root: `http://127.0.0.1:8000/api/`
+- Swagger UI: `http://127.0.0.1:8000/api/docs/`
+- OpenAPI schema: `http://127.0.0.1:8000/api/schema/`
+
+## Local Development
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
 pip install -r requirements.txt
-```
-
-Create local environment config:
-
-```bash
 cp .env.example .env
-```
-
-Run migrations:
-
-```bash
 python manage.py migrate
-```
-
-Load sample fuel prices:
-
-```bash
 python manage.py import_fuel_prices data/sample_fuel_prices.csv
-```
-
-Start the server:
-
-```bash
 python manage.py runserver
 ```
 
-## Environment
-
-Required local variables:
-
-```bash
-DJANGO_SECRET_KEY=change-me
-DJANGO_DEBUG=true
-DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,testserver
-NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org/search
-NOMINATIM_USER_AGENT=fuel-route-api/0.1
-OSRM_BASE_URL=https://router.project-osrm.org
-EXTERNAL_API_TIMEOUT_SECONDS=10
-ROUTE_CACHE_TIMEOUT_SECONDS=86400
-GEOCODING_CACHE_TIMEOUT_SECONDS=86400
-```
-
-No paid API key is required for the current implementation. For a public/demo submission, set `NOMINATIM_USER_AGENT` to something identifiable, such as a repo URL or contact string.
-
-## Quick Checks
-
-Health check:
-
-```bash
-curl http://127.0.0.1:8000/health/
-```
-
-API root:
-
-```bash
-curl http://127.0.0.1:8000/api/
-```
-
-Swagger UI:
-
-```bash
-http://127.0.0.1:8000/api/docs/
-```
-
-## What This API Does
-
-The core endpoint accepts two U.S. locations, resolves them to coordinates, pulls an actual driving route, and then estimates fuel stops using local fuel prices.
+## API Usage
 
 Endpoint:
 
-`POST /api/routes/fuel-plan/`
+```http
+POST /api/routes/fuel-plan/
+```
 
-Example:
+Example request:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/routes/fuel-plan/ \
@@ -122,112 +80,232 @@ Request body:
 }
 ```
 
-Response includes:
+Compact response shape:
 
-- resolved start and finish coordinates
-- route summary with distance, duration, fuel usage, and estimated total cost
-- a small route preview so the response stays readable
-- selected fuel stops
-- documented assumptions
+```json
+{
+  "start": "Austin, TX",
+  "finish": "Dallas, TX",
+  "start_location": {
+    "display_name": "Austin, Travis County, Texas, United States",
+    "latitude": 30.2711286,
+    "longitude": -97.7436995
+  },
+  "finish_location": {
+    "display_name": "Dallas, Dallas County, Texas, United States",
+    "latitude": 32.7762719,
+    "longitude": -96.7968559
+  },
+  "route_summary": {
+    "distance_miles": 195.2,
+    "estimated_duration_minutes": 178.4,
+    "fuel_required_gallons": 19.52,
+    "estimated_total_cost": 68.06
+  },
+  "route_geometry_preview": {
+    "type": "LineString",
+    "coordinate_count": 1200,
+    "start": [-97.743783, 30.270908],
+    "end": [-96.796942, 32.776304]
+  },
+  "fuel_stops": [],
+  "assumptions": {
+    "vehicle_range_miles": 500,
+    "fuel_efficiency_mpg": 10,
+    "route_corridor_miles": 10,
+    "fuel_pricing_model": "route-hop refuel estimate using station prices on the selected path",
+    "pricing_source": "average_or_default_price"
+  }
+}
+```
 
-If you want the full GeoJSON route in the response, send `include_geometry: true`.
+To include the full GeoJSON route geometry:
 
-## External Services
+```json
+{
+  "start": "Austin, TX",
+  "finish": "Dallas, TX",
+  "include_geometry": true
+}
+```
 
-- Geocoding: Nominatim search API
-- Routing: OSRM public route service
+## HTTP Status Codes
 
-Both are wrapped behind service classes and cached by Django cache to avoid repeated free API calls for the same request.
+- `200 OK`: fuel plan generated
+- `400 Bad Request`: invalid request body, for example same start and finish
+- `404 Not Found`: location or route could not be found
+- `503 Service Unavailable`: upstream geocoding or routing service unavailable
+- `504 Gateway Timeout`: upstream geocoding or routing service timed out
+
+This keeps API behavior explicit and easier to debug than returning only `200` or `400`.
 
 ## Fuel Data Import
 
-Use the management command to load the provided fuel-price CSV:
+Load fuel prices:
 
-`python manage.py import_fuel_prices path/to/fuel_prices.csv`
+```bash
+python manage.py import_fuel_prices data/sample_fuel_prices.csv
+```
 
-Dry run:
+Dry run without writing:
 
-`python manage.py import_fuel_prices path/to/fuel_prices.csv --dry-run`
+```bash
+python manage.py import_fuel_prices data/sample_fuel_prices.csv --dry-run
+```
 
-## Assumptions
+The importer accepts common CSV headers such as:
 
-- The vehicle is modeled with a 500-mile maximum range.
-- Fuel efficiency is fixed at 10 MPG.
-- Stop planning uses route geometry plus a 10-mile corridor around the route.
-- Fuel spending is estimated from the refuel stops the planner selects along the route.
-- If no route-corridor station data is available, the API falls back to average known station price, or `3.50` if the database is empty.
+- `station_name`, `name`, `brand`
+- `address`, `street`, `street_address`
+- `city`, `town`
+- `state`, `region`
+- `lat`, `latitude`
+- `lon`, `lng`, `long`, `longitude`
+- `price`, `gas_price`, `price_per_gallon`
+
+## Architecture
+
+```text
+config/
+  settings.py        Project settings, DRF, Swagger, cache, provider config
+  urls.py            Project URL routing
+
+apps/routes/
+  models.py          FuelStation database model
+  serializers.py     DRF request validation
+  schemas.py         Pydantic response schemas
+  views.py           API controller and HTTP status mapping
+  services/
+    fuel_plan_service.py       Main orchestration
+    geocoding_service.py       Nominatim integration and cache
+    routing_service.py         OSRM integration and cache
+    optimizer.py               Route corridor and fuel-stop logic
+    geometry_utils.py          Distance and route helpers
+    fuel_station_importer.py   CSV parsing and import
+  management/commands/
+    import_fuel_prices.py      Custom import command
+  tests/             API, importer, optimizer, and provider cache tests
+```
+
+## Algorithm Summary
+
+The fuel planning flow is:
+
+1. Geocode start and finish locations inside the USA.
+2. Fetch one driving route from OSRM with GeoJSON geometry.
+3. Load fuel stations from the local database.
+4. Find stations near the route using a route corridor.
+5. Sort candidate stations by route mile.
+6. Respect a 500-mile maximum vehicle range.
+7. Estimate gallons using `miles / 10`.
+8. Estimate cost using selected station prices.
+9. Return a compact response for API consumers, with optional full geometry for maps.
+
+## External Services
+
+- Nominatim: geocoding start and finish text into coordinates
+- OSRM: route distance, duration, and GeoJSON geometry
+
+Both service calls are cached with Django cache. This improves repeated demo speed and reduces unnecessary external API calls.
+
+No paid API key is required.
+
+## Environment Variables
+
+```bash
+DJANGO_SECRET_KEY=change-me
+DJANGO_DEBUG=true
+DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost,testserver
+NOMINATIM_BASE_URL=https://nominatim.openstreetmap.org/search
+NOMINATIM_USER_AGENT=fuel-route-api/0.1
+OSRM_BASE_URL=https://router.project-osrm.org
+EXTERNAL_API_TIMEOUT_SECONDS=10
+ROUTE_CACHE_TIMEOUT_SECONDS=86400
+GEOCODING_CACHE_TIMEOUT_SECONDS=86400
+```
+
+For a public submission, set `NOMINATIM_USER_AGENT` to something identifiable, such as a repository URL or contact string.
 
 ## Tests
-
-Run the test suite:
 
 ```bash
 python manage.py test apps.routes.tests
 ```
 
-Current coverage focuses on:
+The test suite covers:
 
-- request validation and response shape
-- CSV import behavior
-- route corridor filtering
-- cost-aware station selection
-
-## Interview Notes
-
-This project is intentionally structured as a small algorithmic backend service rather than a demo-only CRUD app. The main signal is in:
-
-- route geometry handling
-- corridor-based station filtering
-- cost-aware stop selection
-- cached service boundaries
-- tested importer and optimizer logic
-
-## Docker
-
-Build and run:
-
-```bash
-docker compose up --build
-```
-
-The container will:
-
-- run migrations
-- load `data/sample_fuel_prices.csv`
-- start Django on `http://127.0.0.1:8000`
-
-If you want a plain image build instead:
-
-```bash
-docker build -t fuel-route-api .
-docker run --env-file .env -p 8000:8000 fuel-route-api
-```
-
-## Demo Flow
-
-For a short walkthrough, show:
-
-1. the request in Postman
-2. the route geometry and selected stops in the response
-3. the importer command
-4. the tests passing
+- successful fuel-plan response shape
+- optional full geometry
+- invalid request validation
+- `404` missing-location behavior
+- `504` timeout behavior
+- CSV importer dry-run behavior
+- optimizer candidate selection
+- provider caching
 
 ## Postman
 
-Import these files into Postman:
+Import:
 
-- [Postman collection](/home/nabeel-et/fuel-route-api/postman/Fuel%20Route%20API.postman_collection.json)
-- [Local environment](/home/nabeel-et/fuel-route-api/postman/Fuel%20Route%20API.local.postman_environment.json)
+- `postman/Fuel Route API.postman_collection.json`
+- `postman/Fuel Route API.local.postman_environment.json`
 
-Set the `Fuel Route API Local` environment and send the `Fuel Plan` request with:
+Select the `Fuel Route API Local` environment and run:
 
-```json
-{
-  "start": "Austin, TX",
-  "finish": "Dallas, TX"
-}
-```
+- `Health Check`
+- `API Root`
+- `Fuel Plan`
 
 ## Swagger
 
-Use the Swagger UI at `http://127.0.0.1:8000/api/docs/` to show the API contract in your Loom.
+Open:
+
+```text
+http://127.0.0.1:8000/api/docs/
+```
+
+Use this during the Loom demo to show the API contract in the browser.
+
+## Loom Guide
+
+The full read-aloud Loom script is in:
+
+```text
+LOOM_SCRIPT.md
+```
+
+Recommended demo order:
+
+1. Start the app with Docker Compose
+2. Show Swagger UI
+3. Send the Postman `Fuel Plan` request
+4. Explain the compact response and `include_geometry`
+5. Walk through `views.py`, `fuel_plan_service.py`, `optimizer.py`, and provider services
+6. Run the tests
+
+## Assumptions
+
+- Start and finish must resolve to U.S. locations.
+- Vehicle maximum range is 500 miles.
+- Fuel efficiency is fixed at 10 MPG.
+- Route corridor is 10 miles.
+- Fuel prices come from imported local station data.
+- If no route-corridor station data is available, the API falls back to average known station price, or `3.50` if the database is empty.
+
+## Why This Stands Out
+
+This project is intentionally built like a small production backend:
+
+- thin API views
+- service-layer business logic
+- clear data validation boundaries
+- typed Pydantic response contracts
+- external provider isolation
+- cached route/geocode calls
+- meaningful HTTP status codes
+- Dockerized setup
+- Swagger docs
+- tests around important behavior
+
+The core engineering choice is to treat route planning as a constrained optimization problem over route geometry and local fuel prices, not just a simple endpoint that returns static data.
+
